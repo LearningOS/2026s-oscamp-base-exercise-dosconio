@@ -23,7 +23,7 @@ impl CountDown {
     }
 }
 
-// TODO: Implement Future trait for CountDown
+// : Implement Future trait for CountDown
 // - Output type is &'static str
 // - Each poll: if count == 0, return Poll::Ready("liftoff!")
 // - Otherwise count -= 1, call cx.waker().wake_by_ref(), return Poll::Pending
@@ -32,8 +32,14 @@ impl CountDown {
 impl Future for CountDown {
     type Output = &'static str;
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        todo!()
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        if self.count == 0 {
+            Poll::Ready("liftoff!")
+        } else {
+            self.count -= 1;
+            cx.waker().wake_by_ref(); 
+            Poll::Pending
+        }
     }
 }
 
@@ -49,15 +55,21 @@ impl YieldOnce {
     }
 }
 
-// TODO: Implement Future trait for YieldOnce
+// : Implement Future trait for YieldOnce
 // - Output type is ()
 // - First poll: set yielded = true, wake waker, return Pending
 // - Second poll: return Ready(())
 impl Future for YieldOnce {
     type Output = ();
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        todo!()
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        if self.yielded {
+            Poll::Ready(())
+        } else {
+            self.yielded = true;
+            cx.waker().wake_by_ref();
+            Poll::Pending
+        }
     }
 }
 

@@ -63,18 +63,46 @@ impl BumpAllocator {
 
 unsafe impl GlobalAlloc for BumpAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        // TODO: Implement bump allocation
-        //
-        // Steps:
+        // Implement bump allocation
+
         // 1. Load current next (use Ordering::SeqCst)
-        // 2. Align next up to layout.align()
-        //    Hint: align_up(addr, align) = (addr + align - 1) & !(align - 1)
-        // 3. Compute allocation end = aligned + layout.size()
-        // 4. If end > heap_end, return null_mut()
-        // 5. Atomically update next to end using compare_exchange
-        //    (if CAS fails, another thread raced — retry in a loop)
-        // 6. Return the aligned address as a pointer
-        todo!()
+        let mut current_next = self.next.load(Ordering::SeqCst);
+        
+        loop {
+            // 2. Align next up to layout.align()
+            //    Hint: align_up(addr, align) = (addr + align - 1) & !(align - 1)
+            let align = layout.align();
+            let size = layout.size();
+            let alloc_start = (current_next + align - 1) & !(align - 1);
+            
+            // 3. Compute allocation end = aligned + layout.size()
+            let alloc_end = match alloc_start.checked_add(size) {
+                Some(end) => end,
+                None => return null_mut(), // 溢出
+            };
+            
+            // 4. If end > heap_end, return null_mut()
+            if alloc_end > self.heap_end {
+                return null_mut(); // OOM (Out of Memory)
+            }
+
+            // 5. Atomically update next to end using compare_exchange
+            //    (if CAS fails, another thread raced — retry in a loop)
+            match self.next.compare_exchange_weak(
+                current_next,
+                alloc_end,
+                Ordering::SeqCst,
+                Ordering::SeqCst,
+            ) {
+                // 6. Return the aligned address as a pointer
+                Ok(_) => {
+                    return alloc_start as *mut u8;
+                }
+                Err(actual_next) => {
+                    current_next = actual_next;
+                }
+            }
+        }
     }
 
     unsafe fn dealloc(&self, _ptr: *mut u8, _layout: Layout) {
